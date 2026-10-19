@@ -68,11 +68,15 @@ export function createStudentView() {
       }
 
       function deviceStatus(status) {
-        return deviceStatusLabels[status] || '확인 불가';
+        if (status == null || status === '') return '확인 불가';
+        const label = deviceStatusLabels[status] || '확인 불가';
+        return `${label}(${String(status)})`;
       }
 
       function sessionStatus(status) {
-        return sessionStatusLabels[status] || '확인 불가';
+        if (status == null || status === '') return '확인 불가';
+        const label = sessionStatusLabels[status] || '확인 불가';
+        return `${label}(${String(status)})`;
       }
 
       addResource('현재 로그인 정보', me, (panel, data) => {
