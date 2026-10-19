@@ -231,11 +231,7 @@ export function createStudentView() {
         const message = typeof error?.message === 'string' && error.message
           ? error.message
           : '오류 메시지가 없습니다.';
-        if (error?.code === 'CONTRACT_MISMATCH' || error?.code === 'ENGINE_RESULT_UNVERIFIED') {
-          addText(root, 'p', `확인 불가: 기록 응답 형식을 확인할 수 없습니다. ${message}`);
-        } else {
-          addText(root, 'p', `기록을 불러오지 못했습니다: ${message}`);
-        }
+        addText(root, 'p', `기록을 불러오지 못했습니다: ${message}`);
         return root;
       }
 
