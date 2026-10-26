@@ -854,6 +854,133 @@ export function createStudentView() {
 
       return root;
     },
-    renderAction() { return '학생 구현 대기: 현재 사건·조치·실제 대상·사람 확인·ACK와 원천 효과·unknown을 구분하세요.'; },
+    renderAction({ status, event, actionId, target, receipt, observation, message, confirmationExpiresAt, error } = {}) {
+      const root = document.createElement('section');
+      root.className = 'student-action';
+
+      function addText(parent, tag, text) {
+        const element = document.createElement(tag);
+        element.textContent = String(text ?? '확인 불가');
+        parent.append(element);
+        return element;
+      }
+
+      function addField(parent, label, value) {
+        const row = document.createElement('p');
+        const name = document.createElement('strong');
+        name.textContent = `${label}: `;
+        const content = document.createElement('span');
+        content.textContent = String(value ?? '확인 불가');
+        row.append(name, content);
+        parent.append(row);
+      }
+
+      function safeCode(value) {
+        return typeof value === 'string' && /^[A-Z0-9_]{1,80}$/.test(value)
+          ? value
+          : 'UNKNOWN_ERROR';
+      }
+
+      function safeMessage(value) {
+        if (typeof value !== 'string' || value.trim() === '' || value.length > 500
+          || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value)) {
+          return '안전한 메시지를 확인할 수 없습니다.';
+        }
+        if (/(?:Bearer\s+\S+|sk-(?:proj-|ant-|svcacct-)?[A-Za-z0-9_-]{8,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|(?:api[_ -]?key|authorization|password|비밀번호|토큰)\s*[:=]\s*\S+)/i.test(value)) {
+          return '민감한 내용이 포함되어 있어 메시지를 표시하지 않습니다.';
+        }
+        return value.trim();
+      }
+
+      const statusLabels = {
+        idle: '아직 미실행(idle)',
+        loading: '조치 준비 또는 결과 조회 중(loading)',
+        prepared: '준비됨·미실행(prepared)',
+        executing: '서버에 전달 중(executing)',
+        pending: '서버 접수·처리 중(pending)',
+        succeeded: '효과 확인(succeeded)',
+        denied: '거절(denied)',
+        failed: '실패(failed)',
+        unknown: '결과 불명(unknown)',
+        error: '요청 처리 안 됨(error)',
+        expired: '확인 기한 지남(expired)',
+      };
+
+      addText(root, 'h3', '보안 조치 요청 상태와 결과');
+
+      const knownStatus = typeof status === 'string' && Object.hasOwn(statusLabels, status);
+      const effectiveStatus = knownStatus ? status : 'unknown';
+      const effectConfirmed = effectiveStatus === 'succeeded' && observation?.effectApplied === true;
+      const statusText = effectiveStatus === 'succeeded' && !effectConfirmed
+        ? '결과 불명(unknown)'
+        : statusLabels[effectiveStatus];
+      addText(root, 'p', statusText);
+      if (!knownStatus && status != null) {
+        addText(root, 'p', `확인할 수 없는 상태 코드: ${String(status)}`);
+      }
+
+      if (event?.id != null && event.id !== '') addField(root, '사건 ID', event.id);
+      if (Array.isArray(event?.evidence)) {
+        const evidenceIds = event.evidence
+          .map((evidence) => evidence?.id)
+          .filter((id) => id != null && id !== '')
+          .map(String);
+        if (evidenceIds.length > 0) addField(root, '근거 ID', evidenceIds.join(', '));
+      }
+      if (actionId != null && actionId !== '') addField(root, '조치 ID', actionId);
+      if (target?.id != null && target.id !== '') addField(root, '실제 대상 ID', target.id);
+      if (target?.generation != null) addField(root, '대상 generation', target.generation);
+      if (receipt?.requestId != null && receipt.requestId !== '') addField(root, '요청 ID', receipt.requestId);
+      if (receipt?.receiptId != null && receipt.receiptId !== '') addField(root, '접수 ID', receipt.receiptId);
+      if (receipt?.version != null) addField(root, '결과 version', receipt.version);
+      if (receipt?.status != null && receipt.status !== '') addField(root, '서버 접수 상태', receipt.status);
+
+      if (effectiveStatus === 'idle') {
+        addText(root, 'p', '조치 제안은 아직 실행되지 않았습니다. 조치 준비가 필요한 경우 제공 화면의 기능을 사용하세요.');
+      } else if (effectiveStatus === 'loading') {
+        addText(root, 'p', '조치 준비 또는 연동 시스템 결과 조회를 처리 중입니다. 아직 실행 결과나 효과 관측이 확인되지 않았습니다.');
+      } else if (effectiveStatus === 'prepared') {
+        addText(root, 'p', '조치가 준비되었지만 아직 실행되지 않았습니다. 제공 화면에서 실제 대상과 조치를 확인한 뒤 사람 확인 절차를 진행하세요.');
+        addField(root, '확인 기한', confirmationExpiresAt);
+      } else if (effectiveStatus === 'executing') {
+        addText(root, 'p', '서버에 전달 중(executing)입니다. 결과가 아직 확인되지 않았으며 완료 또는 성공을 뜻하지 않습니다.');
+      } else if (effectiveStatus === 'pending') {
+        addText(root, 'p', '서버 접수·처리 중(pending)입니다. 접수 응답(ACK)은 효과가 확인되었다는 뜻이 아니며, 결과가 아직 확인되지 않았습니다.');
+        addText(root, 'p', '결과는 제공 화면에서 연동 시스템 결과만 재조회해 확인하세요.');
+      } else if (effectiveStatus === 'succeeded') {
+        if (effectConfirmed) {
+          addText(root, 'p', '연동 시스템의 관측으로 조치 효과를 확인했습니다.');
+          addField(root, '관측 시각', observation.observedAt);
+          addField(root, 'effectApplied', 'true');
+          addField(root, '접수 ID', receipt?.receiptId);
+          if (event?.id != null && event.id !== '') {
+            root.setAttribute('data-student-action-event', String(event.id));
+          }
+          if (receipt?.requestId != null && receipt.requestId !== '') {
+            root.setAttribute('data-student-action-request', String(receipt.requestId));
+          }
+        } else {
+          addText(root, 'p', '효과 관측이 확인되지 않아 결과를 성공 또는 효과 없음으로 판단할 수 없습니다.');
+          addText(root, 'p', '제공 화면에서 연동 시스템 결과만 재조회하세요.');
+        }
+      } else if (effectiveStatus === 'denied') {
+        addText(root, 'p', `연동 시스템이 조치를 거절했습니다: ${safeMessage(message)}`);
+      } else if (effectiveStatus === 'failed') {
+        addText(root, 'p', `연동 시스템 처리 실패: ${safeMessage(message)}`);
+      } else if (effectiveStatus === 'unknown') {
+        addText(root, 'p', '조치 결과를 확인할 수 없습니다. 효과가 있거나 없다고 단정하지 마세요.');
+        addText(root, 'p', '제공 화면에서 연동 시스템 결과만 재조회하세요.');
+      } else if (effectiveStatus === 'expired') {
+        addText(root, 'p', '사람 확인 기한이 지났습니다. 이 준비 건을 실행하지 말고 제공 화면에서 조치를 다시 준비하세요.');
+      } else if (effectiveStatus === 'error') {
+        addText(root, 'p', `요청이 처리되지 않았습니다. 오류 코드: ${safeCode(error?.code)} · ${safeMessage(error?.message)}`);
+      }
+
+      if (message != null && message !== '' && ['prepared', 'executing', 'pending', 'denied', 'failed', 'unknown', 'expired'].includes(effectiveStatus)) {
+        addField(root, '서버 메시지', safeMessage(message));
+      }
+
+      return root;
+    },
   };
 }
