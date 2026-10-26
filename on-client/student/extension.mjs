@@ -1,7 +1,8 @@
 // 이 파일은 학생이 같은 프로젝트에서 이어서 구현합니다.
 // 제공 UI를 받은 것만으로 단계를 통과하지 않습니다.
-export function createStudentView() {
-  return {
+export function createStudentView({ api, onChange } = {}) {
+  const dashboard = createDashboard(api, onChange);
+  const view = {
     renderIdentity({ me, devices, sessions } = {}) {
       const root = document.createElement('section');
       root.className = 'student-identity';
@@ -1110,6 +1111,283 @@ export function createStudentView() {
         addField(root, '서버 메시지', safeMessage(message));
       }
 
+      return root;
+    },
+  };
+
+  // 총공세: 보호 현황의 학생 상태 칸 맨 위에 관제 대시보드를 붙입니다.
+  // 기존 renderStatus 결과는 그대로 아래에 이어서 보여 줍니다.
+  const baseRenderStatus = view.renderStatus;
+  view.renderStatus = function renderStatusWithDashboard(input = {}) {
+    const wrap = document.createElement('div');
+    wrap.className = 'student-status-with-dashboard';
+    try {
+      wrap.append(dashboard.render(input));
+    } catch {
+      const note = document.createElement('p');
+      note.textContent = '대시보드를 그리지 못했습니다. 아래 기존 상태 표시는 그대로 동작합니다.';
+      wrap.append(note);
+    }
+    wrap.append(baseRenderStatus.call(view, input));
+    return wrap;
+  };
+
+  return view;
+}
+
+// ---------------------------------------------------------------------------
+// 총공세 관제 대시보드 (학생 구현)
+// - 허용된 학생 API(api.get)만 씁니다. 직접 fetch·브라우저 저장·외부 전송이 없습니다.
+// - 「지금 조회」를 누를 때만 조회합니다. 자동 반복 조회는 하지 않습니다.
+// - 화면에는 textContent 만 씁니다. 예시 값은 쓰지 않고, 실측값에는 조회 시각과 「이 PC 실측」을 붙입니다.
+// - 조회 실패·지원 없음·확인 불가를 정상이나 0건으로 바꾸지 않습니다.
+// - 추이 기록은 이번 실행 중 메모리에만 두며, 앱을 다시 켜거나 새로고침하면 사라집니다.
+// ---------------------------------------------------------------------------
+function createDashboard(api, onChange) {
+  const PC_PATH = '/api/pc/status';
+  const PC_SCHEMA = 'aleph.on.pc-status.v1';
+  const HISTORY_LIMIT = 20;
+  const state = { loading: false, focusButton: false, pc: null, me: null, vulns: null, checkedAt: null, history: [] };
+  const changed = () => { if (typeof onChange === 'function') onChange(); };
+
+  const REASONS = {
+    permission_denied: '권한 부족',
+    query_failed: '조회 실패',
+    timeout: '시간 초과',
+    unsupported: '지원 없음',
+    invalid_response: '응답 확인 불가',
+    invalid_sample: '표본 확인 불가',
+    cancelled: '취소됨',
+  };
+  const MODES = { connected: '연결됨', demo: '예제 자료(demo)', disconnected: '연결 없음', unknown: '확인 불가' };
+  const SCANS = {
+    complete: '모두 조회',
+    partial: '일부 조회 실패',
+    not_checked: '아직 조회 안 함',
+    not_configured: '조회 준비 미완료',
+    unverifiable: '설치 목록 확인 불가',
+  };
+
+  const reasonText = (metric) => {
+    const reason = metric?.reason;
+    return typeof reason === 'string' && Object.hasOwn(REASONS, reason) ? REASONS[reason] + '(' + reason + ')' : '확인 불가';
+  };
+  const timeText = (iso) => {
+    const ms = typeof iso === 'string' ? Date.parse(iso) : NaN;
+    return Number.isFinite(ms) ? new Date(ms).toLocaleTimeString('ko-KR', { hour12: false }) : '시각 확인 불가';
+  };
+  const gb = (bytes) => (bytes / 1024 ** 3).toFixed(1) + ' GB';
+  const safeCode = (value) => (typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,80}$/.test(value) ? value : 'UNKNOWN');
+  const safeMessage = (value) => (typeof value === 'string' && value ? value.slice(0, 200) : '메시지 확인 불가');
+
+  function add(parent, tag, text) {
+    const element = document.createElement(tag);
+    if (text != null) element.textContent = String(text);
+    parent.append(element);
+    return element;
+  }
+  function card(parent, title) {
+    const box = add(parent, 'section');
+    box.className = 'student-dashboard-card';
+    box.style.border = '1px solid #d0d5dd';
+    box.style.borderRadius = '8px';
+    box.style.padding = '12px';
+    box.style.minWidth = '0';
+    add(box, 'h4', title);
+    return box;
+  }
+  function meter(parent, value) {
+    const m = document.createElement('meter');
+    m.min = 0; m.max = 100; m.low = 70; m.high = 90; m.optimum = 0; m.value = value;
+    m.style.width = '100%';
+    parent.append(m);
+  }
+
+  async function get(path) {
+    if (!api || typeof api.get !== 'function') return { ok: false, error: { code: 'NO_STUDENT_API', message: '학생 API를 사용할 수 없습니다.' } };
+    try {
+      const result = await api.get(path);
+      return result && typeof result === 'object' ? result : { ok: false, error: { code: 'INVALID_RESPONSE', message: '응답 형식을 확인할 수 없습니다.' } };
+    } catch {
+      return { ok: false, error: { code: 'CLIENT_ERROR', message: '요청 중 오류가 발생했습니다.' } };
+    }
+  }
+
+  function validPc(result) {
+    const data = result?.ok ? result.data : null;
+    return data && data.schema === PC_SCHEMA && data.source === 'local-pc' && Number.isFinite(Date.parse(data.measuredAt)) ? data : null;
+  }
+
+  async function refresh() {
+    if (state.loading) return;
+    state.loading = true;
+    state.focusButton = true;
+    changed();
+    const [pc, me, vulns] = await Promise.all([get(PC_PATH), get('/api/me'), get('/api/vulnerabilities')]);
+    state.pc = pc;
+    state.me = me;
+    state.vulns = vulns;
+    state.checkedAt = new Date().toISOString();
+    state.loading = false;
+    const data = validPc(pc);
+    if (data) {
+      const m = data.metrics || {};
+      const memOk = m.memory?.state === 'ok' && m.memory.totalBytes > 0;
+      state.history.unshift({
+        at: data.measuredAt,
+        cpu: m.cpu?.state === 'ok' ? m.cpu.usagePercent : null,
+        mem: memOk ? Math.round((1000 * m.memory.usedBytes) / m.memory.totalBytes) / 10 : null,
+        warn: m.events?.state === 'ok' ? m.events.warningCount : null,
+        err: m.events?.state === 'ok' ? m.events.errorCount : null,
+      });
+      if (state.history.length > HISTORY_LIMIT) state.history.length = HISTORY_LIMIT;
+    }
+    changed();
+  }
+
+  function failureLine(parent, result) {
+    const code = safeCode(result?.error?.code);
+    if (code === 'NOT_ALLOWED') add(parent, 'p', '지원 없음(NOT_ALLOWED): 이 앱에서는 학생 코드가 이 값을 읽을 수 없습니다.');
+    else add(parent, 'p', '조회 실패(' + code + '): ' + safeMessage(result?.error?.message));
+  }
+
+  function renderPcCard(grid) {
+    const box = card(grid, '① 내 PC 상태 요약');
+    if (!state.pc) { add(box, 'p', '아직 조회하지 않았습니다. 「지금 조회」를 누르세요.'); return; }
+    if (!state.pc.ok) { failureLine(box, state.pc); return; }
+    const data = validPc(state.pc);
+    if (!data) { add(box, 'p', '응답 형식을 확인할 수 없어 값을 표시하지 않습니다.'); return; }
+    const m = data.metrics || {};
+    if (m.cpu?.state === 'ok') { add(box, 'p', 'CPU ' + m.cpu.usagePercent + '% 사용'); meter(box, m.cpu.usagePercent); }
+    else add(box, 'p', 'CPU: ' + reasonText(m.cpu));
+    if (m.memory?.state === 'ok' && m.memory.totalBytes > 0) {
+      const pct = Math.round((1000 * m.memory.usedBytes) / m.memory.totalBytes) / 10;
+      add(box, 'p', '메모리 ' + gb(m.memory.usedBytes) + ' / ' + gb(m.memory.totalBytes) + ' (' + pct + '%)');
+      meter(box, pct);
+    } else add(box, 'p', '메모리: ' + reasonText(m.memory));
+    if (m.disk?.state === 'ok') add(box, 'p', '디스크 여유 ' + gb(m.disk.freeBytes) + ' / ' + gb(m.disk.totalBytes));
+    else add(box, 'p', '디스크: ' + reasonText(m.disk));
+    if (m.firewall?.state === 'ok' && Array.isArray(m.firewall.profiles)) {
+      add(box, 'p', 'Windows 방화벽 ' + m.firewall.profiles.map((p) => p.name + ' ' + (p.enabled === true ? '켜짐' : p.enabled === false ? '꺼짐' : '확인 불가')).join(' · '));
+    } else add(box, 'p', 'Windows 방화벽: ' + reasonText(m.firewall));
+    add(box, 'small', '이 PC 실측 · ' + timeText(data.measuredAt) + ' · 보안 서버 연결과 별도');
+  }
+
+  function statusText(resource) {
+    const status = resource?.status;
+    if (status === 'ok') return '조회됨(ok)';
+    if (status === 'loading') return '불러오는 중(loading)';
+    if (status === 'idle') return '조회 전(idle)';
+    if (status === 'error') return '조회 실패(' + safeCode(resource?.error?.code) + ')';
+    return '확인 불가';
+  }
+
+  function renderAccountCard(grid, input) {
+    const box = card(grid, '② 계정·기기·세션 조회 상태');
+    const mode = typeof input.mode === 'string' && Object.hasOwn(MODES, input.mode) ? MODES[input.mode] : '확인 불가';
+    add(box, 'p', '보안 서버 연결: ' + mode);
+    if (!state.me) add(box, 'p', '로그인 정보: 아직 조회 안 함');
+    else if (state.me.ok) add(box, 'p', '로그인 정보: 조회됨(' + (typeof state.me.data?.user?.label === 'string' ? '사용자 확인' : '내용 확인 불가') + ')');
+    else add(box, 'p', '로그인 정보: 조회 실패(' + safeCode(state.me.error?.code) + ')');
+    add(box, 'p', '기기 목록: ' + statusText(input.devices));
+    add(box, 'p', '세션 목록: ' + statusText(input.sessions));
+    if (input.mode !== 'connected') add(box, 'small', '보안 서버에 연결되지 않으면 실제 계정·기기·세션 값이 없습니다. 연결 없음은 이상 없음이 아닙니다.');
+  }
+
+  function renderRiskCard(grid, input) {
+    const box = card(grid, '③ 최근 위험 신호');
+    const data = validPc(state.pc);
+    const events = data?.metrics?.events;
+    if (!state.pc) add(box, 'p', 'Windows 기록: 아직 조회하지 않았습니다.');
+    else if (!state.pc.ok) failureLine(box, state.pc);
+    else if (events?.state === 'ok') {
+      add(box, 'p', 'Windows 기록 최근 24시간 경고 ' + events.warningCount + '건 · 오류 ' + events.errorCount + '건');
+      if (events.truncated) add(box, 'p', '기록이 많아 최근 5,000건까지만 집계했습니다(부분 집계).');
+      add(box, 'small', '이 PC 실측 · ' + timeText(data.measuredAt));
+    } else add(box, 'p', 'Windows 기록: ' + reasonText(events));
+    const count = Array.isArray(input.notifications) ? input.notifications.length : null;
+    add(box, 'p', '앱 알림: ' + (count == null ? '확인 불가' : count + '건'));
+    add(box, 'small', '건수는 침해 판정이 아닙니다. 0건이어도 안전하다는 뜻은 아닙니다.');
+  }
+
+  function renderVulnCard(grid) {
+    const box = card(grid, '④ 취약점 조회 상태');
+    if (!state.vulns) { add(box, 'p', '아직 조회하지 않았습니다.'); }
+    else if (!state.vulns.ok) failureLine(box, state.vulns);
+    else {
+      const scan = state.vulns.data?.status;
+      const label = typeof scan === 'string' && Object.hasOwn(SCANS, scan) ? SCANS[scan] + '(' + scan + ')' : '확인 불가(' + String(scan ?? 'unknown') + ')';
+      add(box, 'p', '전체 조회 상태: ' + label);
+      if (state.checkedAt) add(box, 'small', '조회 시각 ' + timeText(state.checkedAt));
+    }
+    add(box, 'small', '조회 실패·미조회·준비 미완료는 취약점이 없다는 뜻이 아닙니다.');
+  }
+
+  function diff(now, before) {
+    if (now == null || before == null) return '';
+    const d = Math.round((now - before) * 10) / 10;
+    return d === 0 ? ' (변화 없음)' : d > 0 ? ' (▲' + d + ')' : ' (▼' + Math.abs(d) + ')';
+  }
+
+  function renderHistory(root) {
+    const box = add(root, 'section');
+    box.className = 'student-dashboard-history';
+    add(box, 'h4', '조회 추이와 기록 (이번 실행 중 최근 ' + HISTORY_LIMIT + '회)');
+    add(box, 'small', '「지금 조회」를 누를 때마다 한 줄씩 쌓입니다. 저장하지 않으므로 앱을 다시 켜거나 새로고침하면 사라집니다.');
+    if (!state.history.length) { add(box, 'p', '아직 기록이 없습니다.'); return; }
+    const table = add(box, 'table');
+    table.style.width = '100%';
+    table.style.borderCollapse = 'collapse';
+    const head = add(add(table, 'thead'), 'tr');
+    for (const name of ['조회 시각', 'CPU %', '메모리 %', 'Windows 경고', 'Windows 오류']) {
+      const th = add(head, 'th', name);
+      th.scope = 'col';
+      th.style.textAlign = 'left';
+    }
+    const body = add(table, 'tbody');
+    state.history.forEach((row, index) => {
+      const prev = state.history[index + 1];
+      const tr = add(body, 'tr');
+      add(tr, 'td', timeText(row.at));
+      add(tr, 'td', row.cpu == null ? '확인 불가' : row.cpu + diff(row.cpu, prev?.cpu));
+      add(tr, 'td', row.mem == null ? '확인 불가' : row.mem + diff(row.mem, prev?.mem));
+      add(tr, 'td', row.warn == null ? '확인 불가' : row.warn + diff(row.warn, prev?.warn));
+      add(tr, 'td', row.err == null ? '확인 불가' : row.err + diff(row.err, prev?.err));
+    });
+    add(box, 'small', '모든 값은 이 PC 실측입니다. 괄호는 바로 이전 조회와 비교한 변화입니다.');
+  }
+
+  return {
+    render(input = {}) {
+      const root = document.createElement('section');
+      root.className = 'student-dashboard';
+      add(root, 'h3', '모몽강 관제 대시보드');
+      add(root, 'p', '학생 구현 화면입니다. 위쪽 제공 「내 PC 상태」와 별도로, 허용된 학생 API로 받은 값만 보여 줍니다.');
+
+      const bar = add(root, 'p');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = state.loading ? '조회 중…' : '지금 조회';
+      button.disabled = state.loading;
+      button.addEventListener('click', () => { refresh(); });
+      bar.append(button);
+      add(bar, 'span', state.checkedAt ? ' 마지막 조회 ' + timeText(state.checkedAt) : ' 아직 조회하지 않았습니다. 자동 조회는 하지 않습니다.');
+      if (state.focusButton && !state.loading) {
+        state.focusButton = false;
+        queueMicrotask(() => { if (button.isConnected) button.focus(); });
+      }
+
+      const grid = add(root, 'div');
+      grid.style.display = 'grid';
+      grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(220px, 1fr))';
+      grid.style.gap = '12px';
+      grid.style.margin = '12px 0';
+      renderPcCard(grid);
+      renderAccountCard(grid, input);
+      renderRiskCard(grid, input);
+      renderVulnCard(grid);
+
+      renderHistory(root);
       return root;
     },
   };
