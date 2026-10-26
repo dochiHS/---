@@ -7,14 +7,22 @@
 | 항목 | 프로젝트에서 확인한 내용 | 확인 범위 |
 |---|---|---|
 | 앱 폴더 | 저장소 안의 `on-client/` | 프로젝트 파일 경로 |
+| 기준 버전 | `package.json`의 `alekov-client-starter` 버전 `0.2.11` | `on-client/package.json`의 메타데이터이며 앱 화면 제목을 뜻하지 않음 |
 | Node.js | `package.json`의 `engines.node`는 `24.19.0` | 프로젝트가 선언한 버전. 이 PC에 설치된 버전은 확인하지 않음 |
-| 앱 패키지 | `alekov-client-starter` 버전 `0.2.11` | `on-client/package.json`의 메타데이터이며 앱 화면 제목을 뜻하지 않음 |
 | npm 명령 | `start`, `demo`, `check` 스크립트가 정의됨 | `on-client/package.json` |
 | 외부 npm 의존성 | `package.json`에 `dependencies` 또는 `devDependencies` 선언이 없음 | 매니페스트만 확인. 설치된 `node_modules` 상태는 확인하지 않음 |
-| 잠금 파일 | 프로젝트 파일 목록에서 `package-lock.json`을 찾지 못함 | 현재 확인 가능한 프로젝트 파일 기준 |
+| 잠금 파일 | 프로젝트 파일 목록에서 `package-lock.json`을 찾지 못함 | 현재 확인 가능한 프로젝트 파일 기준. 잠금 파일 기반 버전 대조 및 OSV 조회는 미조회 |
 | 브라우저 주소 | 기본 주소는 `http://127.0.0.1:5189/`로 안내됨 | 학생 실행 안내 문서 기준. 이 세션에서 앱을 실행해 검증하지 않음 |
 
-`package.json`은 Node.js를 `24.19.0`으로 선언하지만, 기존 `docs/STUDENT_LAUNCH_GUIDE.md`에는 Node.js `22~24`라고 적혀 있습니다. 문서 간 버전 차이가 있으므로 이 실행 설명서는 **현재 `package.json`의 정확한 선언인 Node.js `24.19.0`을 기준으로 안내**합니다. 실제 설치 버전은 실행 전에 `node --version`으로 확인하세요. 이 설명서를 작성하면서 설치·업데이트·외부 네트워크 요청은 하지 않았습니다.
+### 제공 문서의 버전·명령 표기 차이
+
+이 실행 설명서의 기준은 현재 `on-client/package.json`에 선언된 **버전 `0.2.11`, Node.js `24.19.0`, npm 스크립트 `start`·`demo`·`check`**입니다. 제공 문서는 수정하지 않았습니다. 읽어 확인한 표기 차이는 다음과 같습니다.
+
+- `docs/FINAL_PRODUCT_GUIDE.md` 제목은 `starter 0.2.9`로 표기합니다. 이는 `package.json`의 `0.2.11`과 불일치합니다.
+- `docs/AI_SETUP_GUIDE.md`는 스크립트를 `start`·`demo`·`test`라고 표기하지만 `package.json`에 정의된 것은 `start`·`demo`·`check`입니다. `test` 스크립트는 `package.json`에 없습니다.
+- `docs/STUDENT_LAUNCH_GUIDE.md`는 Node.js `22~24` 범위와 수업 기준 `24.19.0`을 함께 적습니다. `package.json`의 정확한 선언은 `24.19.0`입니다.
+
+위 차이는 기록만 했으며 제공 문서를 고치거나 대체하지 않았습니다. 이 PC에 설치된 Node.js·npm 버전은 실행 전에 직접 확인하세요. 이 설명서를 작성하면서 설치·업데이트·외부 네트워크 요청은 하지 않았습니다. `package-lock.json`이 없어 잠금 파일에 기록된 정확한 설치 버전을 대조할 수 없고, 잠금 파일 기반 OSV 취약점 조회도 하지 않았습니다. 의존성·잠금 파일·설정 파일은 추가하거나 변경하지 않았습니다.
 
 ## 2. 프로젝트 폴더 구조
 
@@ -85,6 +93,20 @@
    http://127.0.0.1:5189/
    ```
 
+### 운영자 제공 설정
+
+계정 연결 또는 SDP 연결 설정이 필요한 경우 담당자에게 본인 프로젝트에 사용할 설정과 절차를 문의합니다. 문서나 채팅에는 실제 설정 경로·설정 내용·비밀값을 적지 않습니다. 담당자가 실행 인자를 안내한 경우에만 아래 자리표시자를 담당자가 제공한 경로로 바꾸어 사용하세요. 아래는 자리표시자이며 실제 파일 경로가 아닙니다.
+
+```powershell
+# 계정 연결용 설정을 담당자가 안내한 경우
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1 -NativeHostConfig "<운영자가 안내한 native-host 설정 경로>"
+
+# SDP 연결 설정을 담당자가 안내한 경우
+powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\start-alekov.ps1 -SdpHostConfig "<운영자가 안내한 SDP 설정 경로>"
+```
+
+두 설정은 서로 다른 용도입니다. 설정을 직접 만들거나 다른 사람의 설정을 복사하지 마세요. 실제 경로와 비밀 정보는 이 실행 설명서·재현 기록·Git에 저장하지 않습니다.
+
 ### 종료와 재실행
 
 - 실행 중인 PowerShell 창에서 `Ctrl+C`를 눌러 서버를 종료합니다.
@@ -142,15 +164,16 @@ flowchart LR
 | 계정 또는 기존 엔진 연결 없음 | 화면의 연결 상태와 안전한 오류 코드를 확인 → 기존 `docs/CONNECTION_TROUBLESHOOT.md`, `docs/SDP_HOST_CONNECTION.md` 및 담당자 안내 확인 | 기본 실행의 `연결 없음` 또는 `확인 불가`는 연결 성공이 아닙니다. 설정 파일이 안내되지 않았다면 만들거나 복사하지 말고 담당자에게 문의합니다. |
 | AI 연결 또는 사건 설명 실패 | `docs/AI_SETUP_GUIDE.md`와 연결 오류 안내를 확인 → 연결 점검과 별도 사건 설명 요청을 구분 → 승인·권한 준비 상태는 담당자에게 확인 | AI 연결 점검 성공은 사건 설명 성공이 아니며, 오류·취소·확인 불가는 성공이 아닙니다. 열쇠·토큰·비밀번호를 문서나 채팅에 붙이지 않습니다. |
 | 기록이 비어 있거나 조회 실패 | 화면 문구와 안전한 오류 코드를 구분 → 제공된 다시 불러오기 동작을 사용자가 직접 수행 → 같은 문서의 연결 문제 해결 안내 확인 | 빈 목록은 조회 실패가 아니고, 실패는 빈 목록이나 정상 상태가 아닙니다. 자동 재시도를 가정하지 않습니다. |
-| 패키지 결과가 미조회·일부 실패·확인 불가 | 화면의 전체 조회 상태·패키지 상태·조회 시각과 잠금 파일 관련 정보를 확인 → `docs/`의 패키지 조회 안내 확인 | 미조회·일부 실패·확인 불가는 취약점 없음 또는 앱이 안전하다는 뜻이 아닙니다. 이 문서 작성 중 OSV 조회를 하지 않았습니다. |
+| 패키지 결과가 미조회·일부 실패·확인 불가 | 화면의 전체 조회 상태·패키지 상태·조회 시각과 잠금 파일 관련 정보를 확인 → `docs/`의 패키지 조회 안내 확인 | 현재 `package-lock.json`을 찾지 못해 잠금 파일 기반 정확한 버전 대조와 OSV 조회는 미조회입니다. 이는 취약점 없음이라는 결과가 아닙니다. |
 
 ### 확인한 것과 확인하지 않은 것
 
 **파일 읽기로 확인한 것**
 
-- `on-client/package.json`의 패키지 메타데이터, Node.js 버전 선언, `start`·`demo`·`check` 스크립트.
+- `on-client/package.json`의 패키지 이름·버전, Node.js 버전 선언, `start`·`demo`·`check` 스크립트.
+- 제공 문서의 `0.2.9`, `test`, Node.js `22~24` 표기가 위 기준과 다른 점.
 - 프로젝트 파일 목록의 실행 도구, `public/`, `src/`, `student/`, `docs/` 경로와 기존 학생 실행 안내에 적힌 기본 폴더·주소·종료 방법.
-- 제공된 패키지 조회 화면 코드가 OSV 주소를 명시한다는 점.
+- 제공된 패키지 조회 화면 코드가 OSV 주소를 명시한다는 점. 다만 잠금 파일이 없어 이 프로젝트의 잠금 파일 기반 패키지 버전 대조·OSV 조회는 하지 않았습니다.
 
 **아직 확인하지 않은 것**
 
@@ -170,3 +193,7 @@ flowchart LR
 - [연결 문제 해결](CONNECTION_TROUBLESHOOT.md)
 - [SDP 연결 안내](SDP_HOST_CONNECTION.md)
 - [AI 연결 안내](AI_SETUP_GUIDE.md)
+- [22단계 재현 기록](STUDENT_REPRODUCTION_RECORD.md)
+
+> 재현 결과는 실제로 별도 환경에서 실행하고 관찰한 뒤 `STUDENT_REPRODUCTION_RECORD.md`에 직접 기입합니다. 아직 실행하지 않은 결과를 성공으로 채우지 않습니다.
+
