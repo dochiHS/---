@@ -1,5 +1,6 @@
 {
   "schema": "alekov.student-appearance.v1",
   "appName": "모몽강",
+  "icon": "brand-icon.png",
   "dashboardPreset": "student-first"
 }
