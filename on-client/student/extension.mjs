@@ -1115,20 +1115,22 @@ export function createStudentView({ api, onChange } = {}) {
     },
   };
 
-  // 총공세: 보호 현황의 학생 상태 칸 맨 위에 관제 대시보드를 붙입니다.
-  // 기존 renderStatus 결과는 그대로 아래에 이어서 보여 줍니다.
-  const baseRenderStatus = view.renderStatus;
-  view.renderStatus = function renderStatusWithDashboard(input = {}) {
+  // 총공세: 보호 현황의 첫 번째 학생 칸(로그인 정보) 맨 위에 관제 대시보드를 붙입니다.
+  // 기존 renderIdentity 결과는 그대로 아래에 이어서 보여 줍니다. renderStatus는 바꾸지 않습니다.
+  const baseRenderIdentity = view.renderIdentity;
+  view.renderIdentity = function renderIdentityWithDashboard(input = {}) {
     const wrap = document.createElement('div');
-    wrap.className = 'student-status-with-dashboard';
+    wrap.className = 'student-identity-with-dashboard';
+    const { me, devices, sessions } = input;
+    const mode = me?.mode ?? devices?.mode ?? sessions?.mode;
     try {
-      wrap.append(dashboard.render(input));
+      wrap.append(dashboard.render({ mode, devices, sessions }));
     } catch {
       const note = document.createElement('p');
-      note.textContent = '대시보드를 그리지 못했습니다. 아래 기존 상태 표시는 그대로 동작합니다.';
+      note.textContent = '대시보드를 그리지 못했습니다. 아래 기존 로그인 정보 표시는 그대로 동작합니다.';
       wrap.append(note);
     }
-    wrap.append(baseRenderStatus.call(view, input));
+    wrap.append(baseRenderIdentity.call(view, input));
     return wrap;
   };
 
@@ -1305,8 +1307,7 @@ function createDashboard(api, onChange) {
       if (events.truncated) add(box, 'p', '기록이 많아 최근 5,000건까지만 집계했습니다(부분 집계).');
       add(box, 'small', '이 PC 실측 · ' + timeText(data.measuredAt));
     } else add(box, 'p', 'Windows 기록: ' + reasonText(events));
-    const count = Array.isArray(input.notifications) ? input.notifications.length : null;
-    add(box, 'p', '앱 알림: ' + (count == null ? '확인 불가' : count + '건'));
+    if (Array.isArray(input.notifications)) add(box, 'p', '앱 알림: ' + input.notifications.length + '건');
     add(box, 'small', '건수는 침해 판정이 아닙니다. 0건이어도 안전하다는 뜻은 아닙니다.');
   }
 
@@ -1362,7 +1363,7 @@ function createDashboard(api, onChange) {
       const root = document.createElement('section');
       root.className = 'student-dashboard';
       add(root, 'h3', '모몽강 관제 대시보드');
-      add(root, 'p', '학생 구현 화면입니다. 위쪽 제공 「내 PC 상태」와 별도로, 허용된 학생 API로 받은 값만 보여 줍니다.');
+      add(root, 'p', '학생 구현 화면입니다. 제공 「내 PC 상태」와 별도로, 허용된 학생 API로 받은 값만 보여 줍니다.');
 
       const bar = add(root, 'p');
       const button = document.createElement('button');
