@@ -1180,23 +1180,24 @@ export function createStudentView({ api, onChange } = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// 총공세 관제 대시보드 (학생 구현) · 3판
+// 총공세 관제 대시보드 (학생 구현) · 7판
 // - 허용된 학생 API(api.get)만 씁니다. 직접 fetch·브라우저 저장·외부 전송이 없습니다.
-// - 「지금 조회」를 누를 때만 조회합니다. 자동 반복 조회는 하지 않습니다.
+// - 앱을 열 때 한 번 조회하고, 그 뒤에는 「지금 조회」를 누를 때만 조회합니다. 자동 반복 조회는 하지 않습니다.
 // - 화면에는 textContent 만 씁니다. 예시 값은 쓰지 않고, 실측값에는 조회 시각과 「이 PC 실측」을 붙입니다.
 // - 조회 실패·지원 없음·확인 불가·연결 없음을 정상이나 0건으로 바꾸지 않습니다.
 // - 추이 기록은 이번 실행 중 메모리에만 두며, 앱을 다시 켜거나 새로고침하면 사라집니다.
 // - Impeccable(pbakaus/impeccable, Apache 2.0)의 critique·clarify·craft-floor·operate 지침을 참고했습니다.
-//   3판: 앱이 이미 쓰는 모양(.btn, .kv, .muted, 색 변수)을 그대로 써서 제공 화면과 어울리게 하고,
-//   카드마다 큰 값 하나와 짧은 설명 한 줄만 보이게 줄였습니다. 자세한 근거는 「자세히 보기」에 접어 둡니다.
+//   5판: 앱 전체 어두운 테마(public/style.css 끝의 색 변수)를 따르도록 앱 색 변수만 씁니다.
+//   상태는 색만으로 구분하지 않고 점 + 글자로 함께 표시합니다(Carbon 상태 표시 패턴).
+//   카드마다 큰 값 하나와 짧은 설명 한 줄만 보이게 하고, 자세한 근거는 「자세히 보기」에 접어 둡니다.
 // ---------------------------------------------------------------------------
 function createDashboard(api, onChange) {
-  const DASHBOARD_VERSION = 3;
+  const DASHBOARD_VERSION = 7;
   const PC_PATH = '/api/pc/status';
   const PC_SCHEMA = 'aleph.on.pc-status.v1';
   const HISTORY_LIMIT = 20;
   const HISTORY_VISIBLE = 5;
-  const state = { loading: false, focusButton: false, detailsOpen: false, historyOpen: false, pc: null, me: null, vulns: null, checkedAt: null, history: [] };
+  const state = { started: false, loading: false, focusButton: false, detailsOpen: false, historyOpen: false, pc: null, me: null, vulns: null, checkedAt: null, history: [] };
   const changed = () => { if (typeof onChange === 'function') onChange(); };
 
   const REASONS = {
@@ -1216,8 +1217,21 @@ function createDashboard(api, onChange) {
     unverifiable: '확인 불가',
   };
   const RESOURCE = { ok: '불러옴', loading: '불러오는 중', idle: '조회 전', error: '불러오지 못함' };
-  // 앱의 고정 상태 색을 그대로 씁니다. 꾸밈 파일로 바뀌지 않는 색입니다.
-  const TONE = { normal: 'var(--text)', unknown: 'var(--unknown)', warn: 'var(--challenge)', fail: 'var(--deny)' };
+  // 앱 색 변수만 씁니다. 밝은 테마·어두운 테마 어느 쪽이든 앱과 같은 색으로 보입니다.
+  // 상태 색(allow·challenge·deny·unknown)은 앱이 고정한 의미 색입니다.
+  const DARK = {
+    panel: 'var(--surface)', tile: 'var(--bg)', line: 'var(--border)', text: 'var(--text)', muted: 'var(--muted)',
+    accent: 'var(--accent)', ok: 'var(--allow)', warn: 'var(--challenge)', fail: 'var(--deny)', unknown: 'var(--unknown)',
+  };
+  // 상태는 점의 색 + 글자로 함께 보여 줍니다. 「정상」「안전」 같은 판정 대신 무엇을 했는지만 말합니다.
+  const TONE = {
+    normal: { color: DARK.ok, label: '측정됨' },
+    info: { color: DARK.ok, label: '측정됨' },
+    warn: { color: DARK.warn, label: '주의' },
+    fail: { color: DARK.fail, label: '주의 높음' },
+    unknown: { color: DARK.unknown, label: '확인 불가' },
+    idle: { color: DARK.unknown, label: '조회 전' },
+  };
 
   const pad = (n) => String(n).padStart(2, '0');
   const timeText = (iso) => {
@@ -1241,10 +1255,55 @@ function createDashboard(api, onChange) {
     parent.append(element);
     return element;
   }
+  function muted(parent, text, tag = 'p') {
+    const element = add(parent, tag, text);
+    element.style.color = DARK.muted;
+    element.style.fontSize = '0.875rem';
+    element.style.margin = '0';
+    return element;
+  }
+  function label(parent, text) {
+    const element = add(parent, 'h4', text);
+    element.style.color = DARK.muted;
+    element.style.fontSize = '0.8rem';
+    element.style.fontWeight = '600';
+    element.style.letterSpacing = '0.02em';
+    element.style.margin = '0';
+    return element;
+  }
+  function dot(parent, tone) {
+    const t = TONE[tone] || TONE.unknown;
+    const wrap = add(parent, 'span');
+    wrap.style.display = 'inline-flex';
+    wrap.style.alignItems = 'center';
+    wrap.style.gap = '6px';
+    wrap.style.fontSize = '0.8rem';
+    wrap.style.fontWeight = '600';
+    wrap.style.color = t.color;
+    const mark = add(wrap, 'span');
+    mark.setAttribute('aria-hidden', 'true');
+    mark.style.width = '8px';
+    mark.style.height = '8px';
+    mark.style.borderRadius = '50%';
+    mark.style.background = tone === 'idle' ? 'transparent' : t.color;
+    mark.style.border = '1.5px solid ' + t.color;
+    mark.style.flex = 'none';
+    add(wrap, 'span', t.label);
+    return wrap;
+  }
   function kv(parent, rows) {
-    const dl = add(parent, 'dl', null, 'kv');
-    dl.style.margin = '0 0 12px';
-    for (const [label, value] of rows) { add(dl, 'dt', label); add(dl, 'dd', value); }
+    const dl = add(parent, 'dl');
+    dl.style.display = 'grid';
+    dl.style.gridTemplateColumns = 'minmax(84px, max-content) minmax(0, 1fr)';
+    dl.style.gap = '6px 16px';
+    dl.style.margin = '6px 0 16px';
+    for (const [name, value] of rows) {
+      const dt = add(dl, 'dt', name);
+      dt.style.color = DARK.muted;
+      const dd = add(dl, 'dd', value);
+      dd.style.margin = '0';
+      dd.style.overflowWrap = 'anywhere';
+    }
     return dl;
   }
 
@@ -1263,10 +1322,10 @@ function createDashboard(api, onChange) {
   }
   const memPercent = (m) => (m.memory?.state === 'ok' && m.memory.totalBytes > 0 ? Math.round((1000 * m.memory.usedBytes) / m.memory.totalBytes) / 10 : null);
 
-  async function refresh() {
+  async function refresh({ focus = true } = {}) {
     if (state.loading) return;
     state.loading = true;
-    state.focusButton = true;
+    state.focusButton = focus;
     changed();
     const [pc, me, vulns] = await Promise.all([get(PC_PATH), get('/api/me'), get('/api/vulnerabilities')]);
     state.pc = pc;
@@ -1299,14 +1358,14 @@ function createDashboard(api, onChange) {
 
   // 카드 네 개의 요약(큰 값 하나 + 한 줄)
   function pcTile() {
-    if (!state.pc) return { value: '조회 전', sub: 'CPU·메모리·디스크·방화벽', tone: 'unknown' };
+    if (!state.pc) return { value: '—', sub: 'CPU·메모리·디스크·방화벽', tone: 'idle' };
     if (!state.pc.ok) return failText(state.pc, '이 PC 값을');
     const data = validPc(state.pc);
     if (!data) return { value: '확인 불가', sub: '받은 값의 형식을 확인할 수 없음', tone: 'unknown' };
     const m = data.metrics || {};
     const cpu = m.cpu?.state === 'ok' ? m.cpu.usagePercent : null;
     const mem = memPercent(m);
-    const value = 'CPU ' + (cpu == null ? '?' : Math.round(cpu) + '%') + ' · 메모리 ' + (mem == null ? '?' : Math.round(mem) + '%');
+    const value = ['CPU ' + (cpu == null ? '확인 불가' : Math.round(cpu) + '%'), '메모리 ' + (mem == null ? '확인 불가' : Math.round(mem) + '%')];
     const parts = [];
     if (m.disk?.state === 'ok') parts.push('디스크 여유 ' + gb(m.disk.freeBytes));
     if (m.firewall?.state === 'ok' && Array.isArray(m.firewall.profiles)) {
@@ -1320,20 +1379,20 @@ function createDashboard(api, onChange) {
   function connectionTile(input) {
     if (input.mode === 'connected') return { value: '연결됨', sub: '로그인·기기·세션을 보안 서버에서 불러옴', tone: 'normal' };
     if (input.mode === 'demo') return { value: '예제 자료', sub: '실제 값이 아닙니다(demo)', tone: 'warn' };
-    if (input.mode === 'disconnected') return { value: '연결 없음', sub: '로그인·기기·세션 값 없음 · 이상 없음이 아님', tone: 'unknown' };
+    if (input.mode === 'disconnected') return { value: '연결 없음', sub: '로그인·기기·세션 값 없음 · 이상 없음이 아님', tone: 'unknown', status: '연결 없음' };
     return { value: '확인 불가', sub: '연결 상태를 확인할 수 없음', tone: 'unknown' };
   }
   function riskTile() {
-    if (!state.pc) return { value: '조회 전', sub: '최근 24시간 Windows 기록', tone: 'unknown' };
+    if (!state.pc) return { value: '—', sub: '최근 24시간 Windows 기록', tone: 'idle' };
     if (!state.pc.ok) return failText(state.pc, 'Windows 기록을');
     const events = validPc(state.pc)?.metrics?.events;
     if (events?.state === 'ok') {
-      return { value: '경고 ' + events.warningCount + ' · 오류 ' + events.errorCount, sub: '최근 24시간 · 침해 판정 아님' + (events.truncated ? ' · 부분 집계' : ''), tone: 'normal' };
+      return { value: '경고 ' + events.warningCount + ' · 오류 ' + events.errorCount, sub: '최근 24시간 · 침해 판정 아님' + (events.truncated ? ' · 부분 집계' : ''), tone: 'info' };
     }
     return { value: '확인 불가', sub: 'Windows 기록: ' + reasonText(events), tone: 'unknown' };
   }
   function vulnTile() {
-    if (!state.vulns) return { value: '조회 전', sub: '설치 패키지 취약점', tone: 'unknown' };
+    if (!state.vulns) return { value: '—', sub: '설치 패키지 취약점', tone: 'idle' };
     if (!state.vulns.ok) return failText(state.vulns, '조회 결과를');
     const scan = state.vulns.data?.status;
     const known = typeof scan === 'string' && Object.hasOwn(SCANS, scan);
@@ -1343,25 +1402,39 @@ function createDashboard(api, onChange) {
 
   function tile(grid, title, info) {
     const box = add(grid, 'section', null, 'student-dashboard-tile');
-    box.style.background = 'var(--bg)';
-    box.style.borderRadius = 'var(--radius)';
-    box.style.padding = '14px';
+    box.style.background = DARK.tile;
+    box.style.border = '1px solid ' + DARK.line;
+    box.style.borderRadius = '10px';
+    box.style.padding = '14px 16px';
     box.style.minWidth = '0';
-    add(box, 'h4', title);
-    const value = add(box, 'p', info.value);
-    value.style.fontSize = '1.15rem';
+    const top = add(box, 'div');
+    top.style.display = 'flex';
+    top.style.justifyContent = 'space-between';
+    top.style.alignItems = 'center';
+    top.style.gap = '8px';
+    label(top, title);
+    const status = dot(top, info.tone);
+    if (info.status) status.lastChild.textContent = info.status;
+    const value = add(box, 'p');
+    (Array.isArray(info.value) ? info.value : [info.value]).forEach((part) => { add(value, 'span', part).style.display = 'block'; });
+    value.style.fontSize = '1.3rem';
+    value.style.lineHeight = '1.3';
     value.style.fontWeight = '650';
-    value.style.margin = '6px 0 4px';
-    value.style.color = TONE[info.tone] || TONE.normal;
+    value.style.fontVariantNumeric = 'tabular-nums';
+    value.style.margin = '10px 0 4px';
+    // 핵심 수치 색은 테마의 --value 를 쓰고, 없으면 본문 글자색을 씁니다.
+    // 측정값 글자색은 그 칸의 상태 점 색과 같습니다(측정됨 초록, 주의 노랑·빨강).
+    // 연결 없음·확인 불가·조회 전은 옅은 보조 글자색으로 둡니다(강조로 오해되지 않게).
+    value.style.color = info.tone === 'idle' || info.tone === 'unknown' ? DARK.muted : (TONE[info.tone] || TONE.normal).color;
     value.style.overflowWrap = 'anywhere';
     if (info.badge) {
-      const badge = add(box, 'span', info.badge, 'tag');
-      badge.style.marginLeft = '0';
-      badge.style.background = info.tone === 'fail' ? 'var(--deny-soft)' : 'var(--challenge-soft)';
-      badge.style.color = info.tone === 'fail' ? 'var(--deny)' : 'var(--challenge)';
+      const badge = add(box, 'p', info.badge);
+      badge.style.margin = '0 0 4px';
+      badge.style.fontSize = '0.8rem';
+      badge.style.fontWeight = '600';
+      badge.style.color = TONE[info.tone]?.color ?? DARK.warn;
     }
-    const sub = add(box, 'p', info.sub, 'muted');
-    sub.style.margin = info.badge ? '6px 0 0' : '0';
+    muted(box, info.sub);
   }
 
   function renderDetails(root, input) {
@@ -1369,13 +1442,16 @@ function createDashboard(api, onChange) {
     details.open = state.detailsOpen;
     details.addEventListener('toggle', () => { state.detailsOpen = details.open; });
     details.style.margin = '0 0 12px';
+    details.style.borderTop = '1px solid ' + DARK.line;
+    details.style.paddingTop = '10px';
     const summaryEl = add(details, 'summary', '자세히 보기 · 근거와 오류 코드');
     summaryEl.style.cursor = 'pointer';
-    summaryEl.style.color = 'var(--muted)';
+    summaryEl.style.color = DARK.accent;
+    summaryEl.style.fontSize = '0.875rem';
     const body = add(details, 'div');
     body.style.paddingTop = '12px';
 
-    add(body, 'h4', '내 PC 상태');
+    label(body, '내 PC 상태');
     const data = validPc(state.pc);
     if (data) {
       const m = data.metrics || {};
@@ -1390,9 +1466,9 @@ function createDashboard(api, onChange) {
         ['기준', '사용량 70% 이상 많음, 90% 이상 매우 많음'],
         ['출처', '이 PC 실측 · ' + timeText(data.measuredAt)],
       ]);
-    } else add(body, 'p', state.pc ? '이 PC 값을 불러오지 못했습니다. 오류 코드: ' + safeCode(state.pc.error?.code) : '아직 조회하지 않았습니다.', 'muted');
+    } else { const m = muted(body, state.pc ? '이 PC 값을 불러오지 못했습니다. 오류 코드: ' + safeCode(state.pc.error?.code) : '아직 조회하지 않았습니다.'); m.style.margin = '6px 0 16px'; }
 
-    add(body, 'h4', '보안 서버 연결');
+    label(body, '보안 서버 연결');
     const meText = !state.me ? '조회 전' : state.me.ok ? '불러옴' : '불러오지 못함';
     const codes = [state.me?.ok === false ? state.me.error?.code : null, input.devices?.error?.code, input.sessions?.error?.code].filter(Boolean).map(safeCode);
     kv(body, [
@@ -1403,7 +1479,7 @@ function createDashboard(api, onChange) {
       ['다음 할 일', input.mode === 'connected' ? '없음' : '보안 서버(SDP) 연결은 담당자 설정이 필요합니다'],
     ]);
 
-    add(body, 'h4', '최근 위험 신호');
+    label(body, '최근 위험 신호');
     const events = data?.metrics?.events;
     kv(body, [
       ['범위', 'Windows System·Application 기록, 최근 24시간, 최대 5,000건'],
@@ -1412,7 +1488,7 @@ function createDashboard(api, onChange) {
       ['읽는 법', '건수는 침해 판정이 아니며, 0건도 안전하다는 뜻이 아닙니다'],
     ]);
 
-    add(body, 'h4', '취약점 조회');
+    label(body, '취약점 조회');
     kv(body, [
       ['상태', !state.vulns ? '조회 전' : state.vulns.ok ? String(state.vulns.data?.status ?? 'unknown') : '불러오지 못함(' + safeCode(state.vulns.error?.code) + ')'],
       ['조회 시각', state.checkedAt ? timeText(state.checkedAt) : '조회 전'],
@@ -1431,10 +1507,10 @@ function createDashboard(api, onChange) {
       th.scope = 'col';
       th.style.textAlign = i === 0 ? 'left' : 'right';
       th.style.padding = '6px 8px';
-      th.style.color = 'var(--muted)';
+      th.style.color = DARK.muted;
       th.style.fontWeight = '500';
       th.style.fontSize = '0.875rem';
-      th.style.borderBottom = '1px solid var(--border)';
+      th.style.borderBottom = '1px solid ' + DARK.line;
     });
     const body = add(table, 'tbody');
     const diff = (now, before) => {
@@ -1453,31 +1529,35 @@ function createDashboard(api, onChange) {
         row.err == null ? '확인 불가' : row.err + diff(row.err, prev?.err),
       ].forEach((text, i) => {
         const td = add(tr, 'td', text);
+        if (text === '확인 불가') td.style.color = DARK.muted;
         td.style.textAlign = i === 0 ? 'left' : 'right';
         td.style.padding = '6px 8px';
-        td.style.borderBottom = '1px solid var(--border)';
+        td.style.borderBottom = '1px solid ' + DARK.line;
       });
     });
   }
 
   function renderHistory(root) {
     const box = add(root, 'section', null, 'student-dashboard-history');
-    add(box, 'h4', '조회 추이 · 이 PC 실측');
+    box.style.borderTop = '1px solid ' + DARK.line;
+    box.style.paddingTop = '12px';
+    label(box, '조회 추이 · 이 PC 실측');
     if (!state.history.length) {
-      add(box, 'p', '조회할 때마다 한 줄씩 쌓입니다. 저장하지 않아 새로고침하면 사라집니다.', 'muted').style.margin = '0';
+      muted(box, '조회할 때마다 한 줄씩 쌓입니다. 저장하지 않아 새로고침하면 사라집니다.').style.marginTop = '6px';
       return;
     }
     historyTable(box, state.history.slice(0, HISTORY_VISIBLE), 0);
     const rest = state.history.slice(HISTORY_VISIBLE);
-    const foot = add(box, 'p', '괄호는 바로 전 조회와의 차이 · 최근 ' + HISTORY_LIMIT + '회까지 보관 · 새로고침하면 사라짐', 'muted');
-    foot.style.margin = '6px 0 0';
+    const foot = muted(box, '괄호는 바로 전 조회와의 차이 · 최근 ' + HISTORY_LIMIT + '회까지 보관 · 새로고침하면 사라짐');
+    foot.style.marginTop = '6px';
     if (rest.length) {
       const more = add(box, 'details');
       more.open = state.historyOpen;
       more.addEventListener('toggle', () => { state.historyOpen = more.open; });
       const s = add(more, 'summary', '이전 기록 ' + rest.length + '건 더 보기');
       s.style.cursor = 'pointer';
-      s.style.color = 'var(--muted)';
+      s.style.color = DARK.accent;
+      s.style.fontSize = '0.875rem';
       historyTable(more, rest, HISTORY_VISIBLE);
     }
   }
@@ -1487,7 +1567,10 @@ function createDashboard(api, onChange) {
     render(input = {}) {
       const root = document.createElement('section');
       root.className = 'student-dashboard';
-      root.style.marginBottom = '20px';
+      root.style.color = DARK.text;
+      root.style.margin = '0 0 20px';
+      root.style.paddingBottom = '16px';
+      root.style.borderBottom = '1px solid ' + DARK.line;
 
       const header = add(root, 'div');
       header.style.display = 'flex';
@@ -1497,17 +1580,28 @@ function createDashboard(api, onChange) {
       header.style.gap = '8px 16px';
       header.style.marginBottom = '12px';
       const titles = add(header, 'div');
-      add(titles, 'h3', '모몽강 관제 대시보드');
-      const status = add(titles, 'p', state.loading
+      const h3 = add(titles, 'h3', '모몽강 관제 대시보드');
+      h3.style.color = DARK.text;
+      h3.style.fontSize = '1.1rem';
+      const status = muted(titles, state.loading
         ? '이 PC 값과 연결 상태를 읽는 중입니다.'
-        : state.checkedAt ? '마지막 조회 ' + timeText(state.checkedAt) + ' · 자동으로 다시 조회하지 않음' : '「지금 조회」를 누르면 이 PC 값을 읽습니다.', 'muted');
-      status.style.margin = '2px 0 0';
+        : state.checkedAt ? '마지막 조회 ' + timeText(state.checkedAt) + ' · 앱을 열 때 한 번 조회, 이후에는 직접 눌러야 바뀝니다' : '이 PC 값을 읽을 준비를 하는 중입니다.');
+      status.style.marginTop = '2px';
+      status.style.fontVariantNumeric = 'tabular-nums';
       status.setAttribute('role', 'status');
       status.setAttribute('aria-live', 'polite');
       const button = add(header, 'button', state.loading ? '조회 중…' : '지금 조회', 'btn');
       button.type = 'button';
+      button.style.borderColor = DARK.accent;
+      button.style.color = DARK.accent;
+      button.style.fontWeight = '600';
       button.disabled = state.loading;
       button.addEventListener('click', () => { refresh(); });
+      // 앱을 열 때 한 번만 조회합니다. 초점은 옮기지 않습니다.
+      if (!state.started) {
+        state.started = true;
+        queueMicrotask(() => { refresh({ focus: false }); });
+      }
       if (state.focusButton && !state.loading) {
         state.focusButton = false;
         queueMicrotask(() => { if (button.isConnected) button.focus(); });
@@ -1515,13 +1609,33 @@ function createDashboard(api, onChange) {
 
       const grid = add(root, 'div');
       grid.style.display = 'grid';
-      grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(200px, 1fr))';
+      // 네 칸이 3+1로 어긋나지 않도록 넓으면 2열, 좁으면 1열로만 바뀝니다.
+      grid.style.gridTemplateColumns = 'repeat(auto-fit, minmax(max(220px, calc((100% - 12px) / 2)), 1fr))';
       grid.style.gap = '12px';
       grid.style.marginBottom = '12px';
-      tile(grid, '내 PC 상태', pcTile());
-      tile(grid, '보안 서버 연결', connectionTile(input));
-      tile(grid, '최근 위험 신호', riskTile());
-      tile(grid, '취약점 조회', vulnTile());
+      const tiles = [['내 PC 상태', pcTile()], ['보안 서버 연결', connectionTile(input)], ['최근 위험 신호', riskTile()], ['취약점 조회', vulnTile()]];
+      // 상태 요약: 네 칸의 상태를 세기만 합니다. 「안전」 같은 종합 판정은 만들지 않습니다.
+      const counts = { 주의: 0, '확인 불가': 0, 측정됨: 0, '조회 전': 0 };
+      for (const [, info] of tiles) {
+        if (info.tone === 'warn' || info.tone === 'fail') counts['주의'] += 1;
+        else if (info.tone === 'unknown') counts['확인 불가'] += 1;
+        else if (info.tone === 'idle') counts['조회 전'] += 1;
+        else counts['측정됨'] += 1;
+      }
+      const rollup = add(root, 'p');
+      rollup.style.display = 'flex';
+      rollup.style.flexWrap = 'wrap';
+      rollup.style.gap = '6px 16px';
+      rollup.style.margin = '0 0 12px';
+      rollup.style.fontSize = '0.875rem';
+      rollup.setAttribute('aria-label', '상태 요약');
+      for (const [name, tone] of [['주의', 'warn'], ['확인 불가', 'unknown'], ['측정됨', 'normal'], ['조회 전', 'idle']]) {
+        if (!counts[name]) continue;
+        const chip = dot(rollup, tone);
+        chip.lastChild.textContent = name + ' ' + counts[name];
+      }
+      root.insertBefore(rollup, grid);
+      for (const [title, info] of tiles) tile(grid, title, info);
 
       renderDetails(root, input);
       renderHistory(root);

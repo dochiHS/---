@@ -268,3 +268,48 @@ main:focus { outline: none; }
   .identity dd, .kv dd { margin-bottom: 6px; }
   .art-explain { float: none; margin: 0 0 8px; }
 }
+
+/* ===== 모몽강 어두운 테마 (학생 추가 · 총공세) =====
+   위쪽 제공 규칙은 한 줄도 바꾸지 않고, 같은 색 변수에 어두운 값만 다시 넣습니다.
+   글자와 배경의 대비는 모두 4.5:1 이상이며, 허용·거부·추가 확인·확인 불가 상태 색은 같은 의미 계열을 유지합니다.
+   시작 틀을 업데이트하기 전에는 이 블록을 지우면 원래 밝은 화면으로 돌아갑니다. */
+:root {
+  color-scheme: dark;
+  --bg: #0f1417;
+  --surface: #161d21;
+  --border: #2a363c;
+  --text: #d3dde0;
+  --muted: #8a9ba1;
+  --accent: #4fd1c5;
+  --accent-soft: #1f3a3b;
+  --value: #a6eee6;
+  --allow: #4cc38a;
+  --allow-soft: #1e3430;
+  --deny: #ff7b72;
+  --deny-soft: #372a2c;
+  --challenge: #e3b341;
+  --challenge-soft: #333225;
+  --unknown: #a9b6c4;
+  --unknown-soft: #2b3238;
+  --student: #b69cf6;
+  --student-soft: #2c2f3f;
+}
+.brand-mark { color: #0f1417; }
+.diag-output { background: #070b11; border: 1px solid var(--border); }
+::selection { background: #2a4a7a; color: #ffffff; }
+/* 화면 정돈 (학생 추가 · 총공세): 같은 카드 줄에서 짧은 카드가 길게 늘어나 빈 상자가 생기지 않게 하고,
+   대시보드가 있는 줄은 대시보드 칸을 넓힙니다. 오류·안내 띠는 내용은 그대로 두고 색만 차분하게 바꿉니다. */
+.grid-2 { align-items: start; }
+.grid-2:has(#student-identity) { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.card { border-radius: 10px; }
+.error-banner {
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-left: 3px solid var(--deny); font-size: 0.9rem;
+}
+.error-banner strong { color: var(--deny); }
+.notice { background: var(--surface); border: 1px solid var(--border); color: var(--muted); }
+.notice strong { color: var(--text); }
+@media (max-width: 860px) {
+  .grid-2:has(#student-identity) { grid-template-columns: minmax(0, 1fr); }
+}
+/* ===== 모몽강 어두운 테마 끝 ===== */

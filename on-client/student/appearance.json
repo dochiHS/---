@@ -1,10 +1,5 @@
 {
   "schema": "alekov.student-appearance.v1",
   "appName": "모몽강",
-  "palette": {
-    "accent": "#2357c6",
-    "background": "#f5f6f8",
-    "surface": "#ffffff"
-  },
   "dashboardPreset": "student-first"
 }
