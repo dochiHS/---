@@ -1562,6 +1562,96 @@ function createDashboard(api, onChange) {
     }
   }
 
+  // 네 칸의 상태를 고리 조각 네 개로 그립니다. 장식이 아니라 칸 상태의 색을 그대로 옮긴 것이고, 글자와 점으로도 같은 내용을 알립니다.
+  function ring(parent, tones, counts) {
+    const NS = 'http://www.w3.org/2000/svg';
+    const box = add(parent, 'div');
+    box.style.position = 'relative';
+    box.style.width = '112px';
+    box.style.height = '112px';
+    box.style.flex = 'none';
+    const svg = document.createElementNS(NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 140 140');
+    svg.setAttribute('width', '112');
+    svg.setAttribute('height', '112');
+    svg.setAttribute('aria-hidden', 'true');
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('transform', 'rotate(-90 70 70)');
+    g.setAttribute('fill', 'none');
+    g.setAttribute('stroke-width', '11');
+    g.setAttribute('stroke-linecap', 'round');
+    const circ = 2 * Math.PI * 54;
+    tones.forEach((tone, i) => {
+      const c = document.createElementNS(NS, 'circle');
+      c.setAttribute('cx', '70');
+      c.setAttribute('cy', '70');
+      c.setAttribute('r', '54');
+      c.setAttribute('stroke', (TONE[tone] || TONE.unknown).color);
+      c.setAttribute('stroke-dasharray', (circ / tones.length - 9) + ' ' + circ);
+      c.setAttribute('stroke-dashoffset', String(-(circ / tones.length) * i));
+      if (tone === 'idle') c.setAttribute('opacity', '0.5');
+      g.append(c);
+    });
+    svg.append(g);
+    box.append(svg);
+    const center = add(box, 'div');
+    center.style.position = 'absolute';
+    center.style.inset = '0';
+    center.style.display = 'flex';
+    center.style.flexDirection = 'column';
+    center.style.alignItems = 'center';
+    center.style.justifyContent = 'center';
+    center.style.textAlign = 'center';
+    const [name, tone] = counts['주의'] ? ['주의', 'warn'] : counts['확인 불가'] ? ['확인 불가', 'unknown'] : counts['조회 전'] ? ['조회 전', 'idle'] : ['측정됨', 'normal'];
+    muted(center, '현재 상태').style.fontSize = '0.7rem';
+    const big = add(center, 'strong', name);
+    big.style.color = tone === 'idle' || tone === 'unknown' ? DARK.muted : (TONE[tone] || TONE.normal).color;
+    big.style.fontSize = name.length > 3 ? '1rem' : '1.3rem';
+    big.style.lineHeight = '1.2';
+  }
+
+  // ZTNA 접속 경로: 업무 앱에 닿기까지 확인하는 순서와 지금 알 수 있는 상태만 보여 줍니다.
+  // 서버가 판정하는 단계는 연결이 없으면 「대기」로 비워 둡니다. 비어 있음은 이상 없음이 아닙니다.
+  function accessPath(parent, input, pc) {
+    const box = add(parent, 'section', null, 'student-dashboard-path');
+    box.style.margin = '0 0 12px';
+    label(box, '제로 트러스트 접속 경로 · ZTNA').style.marginBottom = '8px';
+    const list = add(box, 'ol');
+    list.style.listStyle = 'none';
+    list.style.margin = '0';
+    list.style.padding = '0';
+    list.style.display = 'grid';
+    list.style.gridTemplateColumns = 'repeat(auto-fit, minmax(130px, 1fr))';
+    list.style.gap = '8px';
+    const loaded = input.mode === 'demo' ? '예제(demo)' : '불러옴';
+    const resource = (r) => (r?.status === 'ok' ? ['normal', loaded] : r?.status === 'loading' || r?.status === 'idle' || r == null ? ['idle', '조회 전'] : ['unknown', '확인 불가']);
+    const user = !state.me ? ['idle', '조회 전'] : state.me.ok ? ['normal', loaded] : ['unknown', '확인 불가'];
+    const steps = [
+      ['1 · 사용자', ...user],
+      ['2 · 기기 상태', pc.tone === 'idle' ? 'idle' : pc.tone, pc.tone === 'idle' ? '조회 전' : (TONE[pc.tone] || TONE.unknown).label],
+      ['3 · 세션', ...resource(input.sessions)],
+      ['4 · 정책 판정', 'idle', input.mode === 'connected' ? '접속 요청 때' : '대기'],
+      ['5 · 업무 앱', 'idle', '접속 전'],
+    ];
+    for (const [title, tone, text] of steps) {
+      const li = add(list, 'li');
+      const measured = tone === 'normal' || tone === 'warn' || tone === 'fail' || tone === 'info';
+      li.style.padding = '10px 12px';
+      li.style.background = DARK.tile;
+      li.style.borderRadius = '8px';
+      li.style.border = '1px ' + (measured ? 'solid ' + (TONE[tone] || TONE.normal).color : 'dashed ' + DARK.line);
+      li.style.minWidth = '0';
+      muted(li, title).style.fontSize = '0.75rem';
+      const state2 = add(li, 'strong', text);
+      state2.style.display = 'block';
+      state2.style.marginTop = '4px';
+      state2.style.color = measured ? (TONE[tone] || TONE.normal).color : DARK.muted;
+    }
+    muted(box, input.mode === 'connected' ? '정책 판정은 업무 앱에 접속을 요청할 때 서버가 내립니다.'
+      : input.mode === 'demo' ? '사용자·세션은 예제 자료입니다(demo). 실제 값이 아니며 정책 판정은 하지 않습니다.'
+      : '서버에 연결되지 않아 사용자·세션·정책은 비어 있습니다. 이상 없음이 아닙니다.').style.marginTop = '8px';
+  }
+
   return {
     version: DASHBOARD_VERSION,
     render(input = {}) {
@@ -1622,11 +1712,19 @@ function createDashboard(api, onChange) {
         else if (info.tone === 'idle') counts['조회 전'] += 1;
         else counts['측정됨'] += 1;
       }
-      const rollup = add(root, 'p');
+      // 8판: 상태 요약을 고리 + 개수로 보여 줍니다. 고리 가운데 글자도 세기만 옮긴 것이며 종합 판정이 아닙니다.
+      const summary = add(root, 'div', null, 'student-dashboard-summary');
+      summary.style.display = 'flex';
+      summary.style.flexWrap = 'wrap';
+      summary.style.alignItems = 'center';
+      summary.style.gap = '12px 24px';
+      summary.style.margin = '0 0 16px';
+      ring(summary, tiles.map(([, info]) => info.tone), counts);
+      const rollup = add(summary, 'p');
       rollup.style.display = 'flex';
-      rollup.style.flexWrap = 'wrap';
-      rollup.style.gap = '6px 16px';
-      rollup.style.margin = '0 0 12px';
+      rollup.style.flexDirection = 'column';
+      rollup.style.gap = '6px';
+      rollup.style.margin = '0';
       rollup.style.fontSize = '0.875rem';
       rollup.setAttribute('aria-label', '상태 요약');
       for (const [name, tone] of [['주의', 'warn'], ['확인 불가', 'unknown'], ['측정됨', 'normal'], ['조회 전', 'idle']]) {
@@ -1634,8 +1732,9 @@ function createDashboard(api, onChange) {
         const chip = dot(rollup, tone);
         chip.lastChild.textContent = name + ' ' + counts[name];
       }
-      root.insertBefore(rollup, grid);
+      root.insertBefore(summary, grid);
       for (const [title, info] of tiles) tile(grid, title, info);
+      accessPath(root, input, tiles[0][1]);
 
       renderDetails(root, input);
       renderHistory(root);
