@@ -121,13 +121,14 @@
 | 도구 | 한 일 |
 |---|---|
 | Claude(Cowork) | 학생의 지시와 선택(시안 A~C 중 B 등)에 따라 관제 대시보드(`student/extension.mjs`), 앱 아이콘, 어두운 테마(청록 블록), 패치 스크립트를 작성하고 검토. 적용, 화면 확인, 커밋은 학생이 함 |
+| Claude Code | 학생의 지시에 따라 파란 계열 전문가용 관제 화면 블록(`public/style.css`, 커밋 dd0d001), 상태 고리와 ZTNA 접속 경로(`student/extension.mjs`, 커밋 4ec83af), 이 기록 문서(`STUDENT_FINAL_RECORD.md`)를 작성. 적용, 화면 확인, 커밋은 학생이 함 |
 | 수업용 Workbench AI | 13~22단계 구현 |
 
 AI가 쓴 코드를 학생이 어떻게 검토하고 반영했는지는 근거 목록에 없어서 쓰지 않았습니다.
 
 ### 참고한 자료
 
-실제로 본 자료만 적었고, 모두 설계 참고입니다. 코드를 가져다 쓴 것이 아닙니다. 학생이 직접 본 자료와 Claude가 작업 중 참고한 자료(Primer)를 구분하지 않고 적었습니다.
+실제로 본 자료만 적었고, 모두 설계 참고입니다. 코드를 가져다 쓴 것이 아닙니다. GitHub Primer 다크 테마는 학생이 직접 본 자료가 아니라 파란 계열 블록을 쓴 Claude Code 세션이 참고한 자료입니다. 라이선스는 학생이 primer/css 저장소의 LICENSE 파일로 확인했습니다.
 
 | 자료 | 라이선스·출처 |
 |---|---|
@@ -136,7 +137,7 @@ AI가 쓴 코드를 학생이 어떻게 검토하고 반영했는지는 근거 �
 | UI UX Pro Max | MIT |
 | Vercel web-design-guidelines | MIT |
 | IBM Carbon 상태 표시 패턴 | 설계 참고 |
-| GitHub Primer 다크 테마 | 설계 참고. 파란 계열 블록 작성 세션이 참고했다고 보고함. 라이선스는 미확인 |
+| GitHub Primer 다크 테마 | 설계 참고 · MIT(GitHub Inc.). 파란 계열 블록 작성 세션이 참고했다고 보고함. 라이선스는 학생이 primer/css 저장소의 LICENSE로 확인함(이 문서 작성자는 직접 열어 보지 않음) |
 | Microsoft Defender XDR 기기 페이지 | 설계 참고 |
 | Grafana 대시보드 모범 사례 | 설계 참고 |
 
@@ -189,6 +190,6 @@ AI가 쓴 코드를 학생이 어떻게 검토하고 반영했는지는 근거 �
 | 항목 | 값 |
 |---|---|
 | 저장소 | https://github.com/dochiHS/momonggang-defense |
-| 커밋 번호 | `afee8ae069b5d345d5072538fcad2448404c90a8` (문서 추가 커밋. 이 값을 적은 수정 커밋은 따로 생김) |
+| 커밋 번호 | 최종 커밋은 포털 제출 시 검증 메모 칸에 적음 |
 | 시작 틀 | 0.2.21 |
 | 이 문서 | `on-client/docs/STUDENT_FINAL_RECORD.md` |
