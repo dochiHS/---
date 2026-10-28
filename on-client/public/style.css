@@ -383,3 +383,7 @@ table, .pc-value, .checked-at { font-variant-numeric: tabular-nums; }
 .decision, .state { border-radius: var(--radius); }
 .diag-output { border-radius: var(--radius); }
 /* ===== 전문가용 관제 화면 끝 ===== */
+
+.connect-help { margin: 8px 0; }
+.connect-help > summary { cursor: pointer; color: var(--muted, #8b949e); font-size: 13px; }
+h4 { color: inherit; font-weight: 700; }
